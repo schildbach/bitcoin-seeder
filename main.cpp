@@ -293,9 +293,9 @@ int StatCompare(const CAddrReport& a, const CAddrReport& b) {
 extern "C" void* ThreadDumper(void*) {
   int count = 0;
   do {
-    Sleep(100000 << count); // First 100s, than 200s, 400s, 800s, 1600s, and then 3200s forever
-    if (count < 5)
-        count++;
+    Sleep(60000 << count); // First 100s, than 200s, 400s, 800s, 1600s, and then 3200s forever
+//    if (count < 5)
+//        count++;
     {
       vector<CAddrReport> v = db.GetAll();
       sort(v.begin(), v.end(), StatCompare);
@@ -323,6 +323,28 @@ extern "C" void* ThreadDumper(void*) {
       FILE *ff = fopen("dnsstats.log", "a");
       fprintf(ff, "%llu %g %g %g %g %g\n", (unsigned long long)(time(NULL)), stat[0], stat[1], stat[2], stat[3], stat[4]);
       fclose(ff);
+      FILE *z = fopen("/var/lib/bind/db.testnet-seed.bitcoin.schildbach.de", "w");
+      fprintf(z, "$ORIGIN testnet-seed.bitcoin.schildbach.de.\n");
+      fprintf(z, "$TTL 1m\n");
+      fprintf(z, "@ IN SOA ns.schildbach.de. andreas.schildbach.de. %ld 1m 1m 4w 1s\n", time(NULL)); // TODO values
+      fprintf(z, "@ IN NS ns.schildbach.de.\n");
+      int numberIp4 = 0, numberIp6 = 0;
+      for (vector<CAddrReport>::const_iterator it = v.begin(); it < v.end(); it++) {
+        CAddrReport rep = *it;
+        if (rep.ip.IsIPv4() && numberIp4 < 25) {
+          fprintf(z, "@ IN %s %s\n", "A", rep.ip.ToStringIP().c_str());
+          numberIp4++;
+        }
+        else if (rep.ip.IsIPv6() && numberIp6 < 25) {
+          fprintf(z, "@ IN %s %s\n", "AAAA", rep.ip.ToStringIP().c_str());
+          numberIp6++;
+        }
+        else if (numberIp4 >= 25 && numberIp6 >= 25) {
+          break;
+        }
+      }
+      fclose(z);
+      (void) system("rndc reload");
     }
   } while(1);
 }
